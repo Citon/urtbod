@@ -1,0 +1,36 @@
+#!/bin/sh
+
+# urtbod-newuser - Create a new URTBOD tunnel server user.
+
+NEWHOSTNAME=${1}
+
+if [ X${NEWHOSTNAME} = X ]; then
+    echo "You must specify a hostname for the new remote client"
+    exit 1
+fi
+
+echo "Please paste the new remote client's SSH public key below and hit ENTER"
+while read -r PUBKEY; do
+    if [ "X${PUBKEY}" != "X" ]; then
+        if echo ${PUBKEY} | egrep '^ssh-(rsa|dss) [a-zA-Z0-9\+\/\=]+ .+\@.+' >> /dev/null; then
+            echo "Public key accepted"
+            break
+        else
+            echo "Invalid public key format - Please re-enter"
+        fi
+    else
+        echo "Invalid input - Please enter a valid SSH public key"
+    fi
+done
+
+
+echo "Adding new account fro ${NEWHOSTNAME}"
+adduser --gecos "${NEWHOSTNAME},,," --disabled-password ${NEWHOSTNAME}
+
+echo "Adding public key for ${NEWHOSTNAME} to ~${NEWHOSTNAME}/.ssh/authorized_keys"
+mkdir -p /home/${NEWHOSTNAME}/.ssh
+echo ${PUBKEY} >> /home/${NEWHOSTNAME}/.ssh/authorized_keys
+chown -R ${NEWHOSTNAME}:${NEWHOSTNAME} /home/${NEWHOSTNAME}/.ssh
+chmod 700 /home/${NEWHOSTNAME}/.ssh/authorized_keys
+
+echo "New account setup complete"

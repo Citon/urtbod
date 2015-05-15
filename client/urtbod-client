@@ -1,0 +1,100 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          shark-urtbod-client
+# Required-Start:    $local_fs $network
+# Required-Stop:     $local_fs $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Shark URTBOD Tunnel
+### END INIT INFO
+
+# Base location of configuration
+CONFBASE=/etc/urtbod
+
+# The monitor interfval for autossh
+AUTOSSH_POLL=120
+
+# Disable the GATETIME feature
+AUTOSSH_GATETIME=60
+
+
+### You should not have to modify anything beyond this point ###
+
+# PID file
+PIDFILE=/var/run/urtbod-client
+
+# Unique port to forward from the remote server for backchannel SSH access
+REMOTEPORT=22${UNIT}
+
+# autossh binary
+AUTOSSH=`which autossh`
+
+# The AUTOSSH monitor port and response ports
+AUTOSSH_MONPORTS=42${UNIT}:52${UNIT}
+
+# Set the FQDN of the server to connect to using the myserver config
+# file
+if [ -f ${CONFBASE}/myserver ]; then
+    URTBODSERVER=`cat ${CONFBASE}/myserver`
+    if [ "X${URTBODSERVER}" = "Xsetme" ]; then
+        echo "$0 FATAL: You must set the fully qualified name or IP for your URTBOD tunnel server in ${CONFBASE}/myserver"
+        exit 1
+    fi
+else
+    echo "$0 FATAL: The URTBOD config file ${CONFBASE}/myserver is missing.  It must contain the fully qualified name or IP for your URTBOD tunnel server."
+    exit 1
+fi
+
+# Set the three digit unit number for this system - IT MUST BE UNIQUE
+# PER-TUNNEL SERVER!
+if [ -f ${CONFBASE}/myunit ]; then
+    UNIT=`cat ${CONFBASE}/myunit`
+    if [ "X${UNIT}" = "Xxxx" ]; then
+        echo "$0 FATAL: You must set a 3 digit URTBOD unit number in ${CONFBASE}/myunit and it must be unique to the URTBOD server you are connecting to"
+        exit 1
+    fi
+else
+    echo "$0 FATAL: The URTBOD config file ${CONFBASE}/myunit is missing. You must set a 3 digit URTBOD unit number in ${CONFBASE}/myunit and it must be unique to the URTBOD server you are connecting to." 
+    exit 1
+fi
+
+
+# Read in the optional ssh-extra file for additional arguments to add to the
+# autossh ssh command
+if [ -f ${CONFBASE}/ssh-extra ]; then
+    SSHEXTRA=`cat ${CONFBASE}/ssh-extra`
+    
+    if [[ ${SSHEXTRA} = \#* ]]; then
+        echo "$0 NOTICE: ${CONFBASE}/ssh-extra exists but is not configured.  Change to add additional SSH arguments or remove the file"
+    fi
+fi
+
+
+# Set the hostname
+if [ "X${HOSTNAME}" = "X" ]; then
+       HOSTNAME=`hostname`
+fi
+
+case "$1" in
+        start)
+                # Start an autossh session (will restart SSH as needed)
+                echo "Initiating autossh link to ${URTBODSERVER} - Remote forward port ${REMOTEPORT}"
+                touch ${PIDFILE}
+                (while [ -e ${PIDFILE} ]; do ${AUTOSSH} ${HOSTNAME}@${URTBODSERVER} -R${REMOTEPORT}:127.0.0.1:22 -N ${SSHEXTRA}; sleep 10; done) &
+                exit 0
+        ;;
+
+        stop)
+                rm ${PIDFILE}
+                pkill autossh
+        ;;
+
+        status)
+                if [ -e ${PIDFILE} ]; then
+                    echo "shark-urtbod-client pid detected - Enabled"
+                fi
+        ;;
+esac
+
+exit 0
+
